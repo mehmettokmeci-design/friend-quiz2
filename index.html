@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Friend Quiz 😎</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { background:#121212; color:#eee; font-family:Arial,sans-serif; margin:0; padding:0; }
+        .container { max-width:700px; margin:auto; padding:15px; }
+        h1 { text-align:center; color:#ffdd57; font-size:1.8em; }
+        input[type=text] { width:100%; padding:12px; font-size:16px; margin:8px 0; border-radius:8px; border:none; }
+        button { padding:12px 20px; margin:8px 4px 8px 0; font-size:16px; border:none; border-radius:8px; cursor:pointer; background:#ffdd57; color:#121212; transition:0.3s; }
+        button:hover { background:#ffc107; }
+        .card { background:#1f1f1f; padding:20px; margin:12px 0; border-radius:12px; box-shadow:0 4px 6px rgba(0,0,0,0.5); position:relative; }
+        .options label { display:block; background:#2c2c2c; padding:12px; margin:6px 0; border-radius:8px; cursor:pointer; transition:0.3s; }
+        .options input { margin-right:10px; }
+        .options label.correct { background:#4caf50 !important; color:white; }
+        .options label.wrong { background:#f44336 !important; color:white; }
+        .score { font-size:20px; color:#ffdd57; text-align:center; margin-top:10px; }
+        .delete-btn { position:absolute; top:10px; right:10px; background:#f44336; color:white; padding:6px 10px; font-size:12px; border-radius:5px; }
+        .delete-btn:hover { background:#d32f2f; }
+        .results { background:#2c2c2c; padding:12px; border-radius:8px; margin:8px 0; }
+        @media(max-width:500px){
+            h1{ font-size:1.4em; }
+            button{ font-size:14px; padding:10px 16px; }
+            input[type=text]{ font-size:14px; padding:10px; }
+            .options label{ font-size:14px; padding:10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Friend Quiz 😎</h1>
+
+    <div id="start">
+        <input type="text" id="nameInput" placeholder="Your name...">
+        <button onclick="chooseRole()">Start</button>
+    </div>
+
+    <div id="roleSelection" style="display:none;">
+        <button onclick="setupQuiz()">Role A - Create Quiz</button>
+        <button onclick="solveQuiz()">Role B - Solve Quiz</button>
+    </div>
+
+    <!-- Role A Quiz Setup -->
+    <div id="quizSetup" style="display:none;">
+        <h2>My Quizzes</h2>
+        <div id="myQuizzesList"></div>
+        <button onclick="addQuestion()">Add New Question</button>
+        <button onclick="generateLink()">Generate Quiz Link</button>
+        <div id="questionsContainer"></div>
+        <button onclick="showResults()">Show Results</button>
+        <button onclick="backToQuiz()">Back to Quiz</button>
+        <div id="resultsContainer"></div>
+    </div>
+
+    <!-- Role B Quiz Play -->
+    <div id="quizPlay" style="display:none;">
+        <div id="questionCard" class="card"></div>
+        <button onclick="nextQuestion()">Next</button>
+    </div>
+
+    <div id="result" style="display:none;">
+        <h2>Quiz Completed 😎</h2>
+        <div class="score" id="scoreText"></div>
+        <button onclick="restart()">Main Menu</button>
+    </div>
+</div>
+
+<script>
+let userName = "", role = "";
+let quizQuestions = [], currentQuestion = 0, userAnswers = [];
+let allQuizzes = JSON.parse(localStorage.getItem("allFriendQuizzes")||"{}");
+
+// On page load - check URL quiz
+window.onload = function(){ loadQuizFromURL(); };
+
+// Start
+function chooseRole(){
+    userName = document.getElementById('nameInput').value.trim();
+    if(!userName){ alert("Enter your name 😎"); return; }
+    document.getElementById('start').style.display="none";
+    document.getElementById('roleSelection').style.display="block";
+}
+
+// Role A
+function setupQuiz(){
+    role = "A";
+    document.getElementById('roleSelection').style.display="none";
+    document.getElementById('quizSetup').style.display="block";
+    displayMyQuizzes();
+    if(document.querySelectorAll('.questionCard').length===0) addQuestion();
+}
+
+function addQuestion(){
+    let qIndex = document.querySelectorAll('.questionCard').length + 1;
+    let container = document.getElementById('questionsContainer');
+    let div = document.createElement('div');
+    div.classList.add('card','questionCard');
+    div.innerHTML = `
+        <button class="delete-btn" onclick="deleteQuestion(this)">Delete</button>
+        <p><b>${qIndex}. Question:</b></p>
+        <input type="text" placeholder="Question text" class="questionText"><br>
+        <p>Options:</p>
+        <input type="text" placeholder="Option 1" class="optionInput"><br>
+        <input type="text" placeholder="Option 2" class="optionInput"><br>
+        <input type="text" placeholder="Option 3" class="optionInput"><br>
+        <input type="text" placeholder="Correct option number (1-3)" class="correctInput"><br>
+    `;
+    container.appendChild(div);
+}
+
+function deleteQuestion(btn){
+    btn.parentElement.remove();
+    let cards = document.querySelectorAll('.questionCard');
+    cards.forEach((c,i)=>{ c.querySelector('p b').innerText = `${i+1}. Question:`; });
+}
+
+// Generate quiz link
+function generateLink(){
+    quizQuestions = [];
+    let questionDivs = document.querySelectorAll('.questionCard');
+    if(questionDivs.length === 0){ alert("Add at least one question 😎"); return; }
+    for(let q of questionDivs){
+        let text = q.querySelector('.questionText').value.trim();
+        let opts = Array.from(q.querySelectorAll('.optionInput')).map(i=>i.value.trim());
+        let correct = parseInt(q.querySelector('.correctInput').value.trim());
+        if(!text || opts.some(o=>o==="") || ![1,2,3].includes(correct)){
+            alert("Fill all fields correctly 😎"); return;
+        }
+        quizQuestions.push({text:text, options:opts, correct:correct});
+    }
+    let quizID = "quiz_" + Date.now();
+    allQuizzes[quizID] = {creator:userName, questions:quizQuestions, results:[]};
+    localStorage.setItem("allFriendQuizzes", JSON.stringify(allQuizzes));
+    displayMyQuizzes();
+    let encoded = btoa(JSON.stringify(quizQuestions));
+    let link = window.location.href.split('?')[0] + "?quiz=" + encoded;
+    prompt("Send this link to Role B:", link);
+}
+
+function displayMyQuizzes(){
+    let container = document.getElementById('myQuizzesList');
+    container.innerHTML = "";
+    for(let id in allQuizzes){
+        if(allQuizzes[id].creator === userName){
+            let div = document.createElement('div');
+            div.classList.add('card');
+            div.innerHTML = `<b>${id}</b> 
+            <button onclick='showQuizResults("${id}")'>Show Results</button>`;
+            container.appendChild(div);
+        }
+    }
+}
+
+function showQuizResults(quizID){
+    let container = document.getElementById('resultsContainer');
+    container.innerHTML = `<h3>Results for ${quizID}</h3>`;
+    let quiz = allQuizzes[quizID];
+    if(quiz.results.length===0){ container.innerHTML += "<p>No one solved yet 😎</p>"; return; }
+    quiz.results.forEach(r=>{
+        container.innerHTML += `<div class="results"><b>${r.name}</b>: ${r.score} / ${r.total}</div>`;
+    });
+}
+
+// Back to quiz
+function backToQuiz(){
+    document.getElementById('resultsContainer').innerHTML = "";
+    document.getElementById('quizSetup').style.display="block";
+}
+
+// Role B
+function solveQuiz(){
+    role = "B";
+    document.getElementById('roleSelection').style.display="none";
+    if(quizQuestions.length === 0){ alert("No quiz found 😎"); return; }
+    currentQuestion = 0;
+    userAnswers = [];
+    document.getElementById('quizPlay').style.display="block";
+    showQuestion();
+}
+
+function showQuestion(){
+    let q = quizQuestions[currentQuestion];
+    let html = `<p><b>${currentQuestion+1}. ${q.text}</b></p><div class="options">`;
+    q.options.forEach((opt,i)=>{ html += `<label><input type="radio" name="opt" value="${i+1}"> ${opt}</label>`; });
+    html += "</div>";
+    document.getElementById('questionCard').innerHTML = html;
+    document.addEventListener('keydown', handleEnter);
+}
+
+function handleEnter(e){ if(e.key==="Enter"){ nextQuestion(); } }
+
+function nextQuestion(){
+    let selected = document.querySelector('input[name="opt"]:checked');
+    if(!selected){ alert("Select an option 😎"); return; }
+    let answer = parseInt(selected.value);
+    userAnswers.push(answer);
+
+    let labels = document.querySelectorAll('label');
+    labels.forEach((lbl,i)=>{
+        if(i+1 === quizQuestions[currentQuestion].correct) lbl.classList.add('correct');
+        if(i+1 === answer && answer !== quizQuestions[currentQuestion].correct) lbl.classList.add('wrong');
+    });
+
+    document.removeEventListener('keydown', handleEnter);
+    currentQuestion++;
+    if(currentQuestion < quizQuestions.length){ setTimeout(showQuestion,1000); }
+    else { setTimeout(finishQuiz,1000); }
+}
+
+function finishQuiz(){
+    document.getElementById('quizPlay').style.display="none";
+    document.getElementById('result').style.display="block";
+    let score = 0;
+    for(let i=0;i<quizQuestions.length;i++){
+        if(userAnswers[i] === quizQuestions[i].correct) score++;
+    }
+    document.getElementById('scoreText').innerText = "Your Score: "+score+" / "+quizQuestions.length;
+
+    // Save result to the correct quiz
+    for(let id in allQuizzes){
+        let quiz = allQuizzes[id];
+        let encoded = btoa(JSON.stringify(quiz.questions));
+        if(encoded === btoa(JSON.stringify(quizQuestions))){
+            quiz.results.push({name:userName, score:score, total:quizQuestions.length});
+            localStorage.setItem("allFriendQuizzes", JSON.stringify(allQuizzes));
+            break;
+        }
+    }
+}
+
+function restart(){
+    userName = ""; role = ""; quizQuestions = []; currentQuestion = 0; userAnswers = [];
+    document.getElementById('start').style.display="block";
+    document.getElementById('roleSelection').style.display="none";
+    document.getElementById('quizSetup').style.display="none";
+    document.getElementById('quizPlay').style.display="none";
+    document.getElementById('result').style.display="none";
+    document.getElementById('nameInput').value = "";
+    document.getElementById('questionsContainer').innerHTML = "";
+    document.getElementById('resultsContainer').innerHTML = "";
+    displayMyQuizzes();
+}
+
+// Load quiz from URL
+function loadQuizFromURL(){
+    let params = new URLSearchParams(window.location.search);
+    if(params.has("quiz")){
+        try{
+            quizQuestions = JSON.parse(atob(params.get("quiz")));
+            solveQuiz();
+        } catch(e){ console.error("Failed to load quiz", e); alert("Invalid quiz link 😎"); }
+    }
+}
+</script>
+</body>
+</html>
